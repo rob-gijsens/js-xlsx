@@ -63,6 +63,20 @@ function parse_ws_xml(data, opts, rels) {
   return s;
 }
 
+function write_ws_xml_sheetpr(sheetpr) {
+	if(sheetpr.length == 0) return "";
+	var o = '<sheetPr>';
+	for(var i in sheetpr) {
+    for(var j in sheetpr[i]){
+      o += '<' + j;
+      for(var k in sheetpr[i][j])
+        o += ' ' + k + '="' + sheetpr[i][j][k] + '"';
+      o += '/>'
+    }
+  }
+	return o + '</sheetPr>';
+}
+
 function write_ws_xml_merges(merges) {
   if (merges.length == 0) return "";
   var o = '<mergeCells count="' + merges.length + '">';
@@ -144,61 +158,41 @@ function write_ws_xml_cols(ws, cols) {
 }
 
 function write_ws_xml_cell(cell, ref, ws, opts, idx, wb) {
-  if (cell.v === undefined && cell.s === undefined) return "";
-  var vv = "";
-  var oldt = cell.t, oldv = cell.v;
-  switch (cell.t) {
-    case 'b':
-      vv = cell.v ? "1" : "0";
-      break;
-    case 'n':
-      vv = '' + cell.v;
-      break;
-    case 'e':
-      vv = BErr[cell.v];
-      break;
-    case 'd':
-      if (opts.cellDates) vv = new Date(cell.v).toISOString();
-      else {
-        cell.t = 'n';
-        vv = '' + (cell.v = datenum(cell.v));
-        if (typeof cell.z === 'undefined') cell.z = SSF._table[14];
-      }
-      break;
-    default:
-      vv = cell.v;
-      break;
-  }
-  var v = writetag('v', escapexml(vv)), o = {r: ref};
-  /* TODO: cell style */
-  var os = get_cell_style(opts.cellXfs, cell, opts);
-  if (os !== 0) o.s = os;
-  switch (cell.t) {
-    case 'n':
-      break;
-    case 'd':
-      o.t = "d";
-      break;
-    case 'b':
-      o.t = "b";
-      break;
-    case 'e':
-      o.t = "e";
-      break;
-    default:
-      if (opts.bookSST) {
-        v = writetag('v', '' + get_sst_id(opts.Strings, cell.v));
-        o.t = "s";
-        break;
-      }
-      o.t = "str";
-      break;
-  }
-  if (cell.t != oldt) {
-    cell.t = oldt;
-    cell.v = oldv;
-  }
-  return writextag('c', v, o);
+	if(cell.v === undefined && cell.s === undefined && (!cell.f)) return "";
+	var vv = "";
+	var oldt = cell.t, oldv = cell.v;
+	switch(cell.t) {
+		case 'b': vv = cell.v ? "1" : "0"; break;
+		case 'n': vv = ''+cell.v; break;
+		case 'e': vv = BErr[cell.v]; break;
+		case 'd':
+			if(opts.cellDates) vv = new Date(cell.v).toISOString();
+			else {
+				cell.t = 'n';
+				vv = ''+(cell.v = datenum(cell.v));
+				if(typeof cell.z === 'undefined') cell.z = SSF._table[14];
+			}
+			break;
+		default: vv = cell.v; break;
+	}
+	var v = (cell.f ? writetag('f', escapexml(cell.f)) : writetag('v', escapexml(vv))), o = {r:ref};
+	/* TODO: cell style */
+	var os = get_cell_style(opts.cellXfs, cell, opts);
+	if(os !== 0) o.s = os;
+	switch(cell.t) {
+		case 'n': break;
+		case 'd': o.t = "d"; break;
+		case 'b': o.t = "b"; break;
+		case 'e': o.t = "e"; break;
+		default:
+			if(opts.bookSST) {
+				v = writetag('v', ''+get_sst_id(opts.Strings, cell.v));
+				o.t = "s"; break;
+			}
+			o.t = "str"; break;
+	}
+	if(cell.t != oldt) { cell.t = oldt; cell.v = oldv; }
+	return writextag('c', v, o);
 }
 
 var parse_ws_xml_data = (function parse_ws_xml_data_factory() {
@@ -347,13 +341,13 @@ var WS_XML_ROOT = writextag('worksheet', null, {
 });
 
 function write_ws_xml(idx, opts, wb) {
-  var o = [XML_HEADER, WS_XML_ROOT];
-  var s = wb.SheetNames[idx], sidx = 0, rdata = "";
-  var ws = wb.Sheets[s];
-  if (ws === undefined) ws = {};
-  var ref = ws['!ref'];
-  if (ref === undefined) ref = 'A1';
-  o[o.length] = (writextag('dimension', null, {'ref': ref}));
+	var o = [XML_HEADER, WS_XML_ROOT];
+	var s = wb.SheetNames[idx], sidx = 0, rdata = "";
+	var ws = wb.Sheets[s];
+	if(ws === undefined) ws = {};
+	if(ws['!sheetPr'] !== undefined && ws['!sheetPr'].length > 0) o[o.length] = (write_ws_xml_sheetpr(ws['!sheetPr']));
+	var ref = ws['!ref']; if(ref === undefined) ref = 'A1';
+	o[o.length] = (writextag('dimension', null, {'ref': ref}));
 
   var kids = [];
   if (ws['!freeze']) {
